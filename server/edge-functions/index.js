@@ -5,7 +5,7 @@ import getProgress from "./getProgress.js";
 import getWrongQuestions from "./getWrongQuestions.js";
 import callAnalysis from "./callAnalysis.js";
 import uploadQuestions from "./uploadQuestions.js";
-import { handleOptions, jsonResponse } from "./edge_config.js";
+import { beginRequestLog, handleOptions, jsonResponse } from "./edge_config.js";
 
 const routes = new Map([
   ["/api/login", login],
@@ -28,6 +28,7 @@ export default {
   async fetch(request) {
     if (request.method === "OPTIONS") return handleOptions(request);
     const url = new URL(request.url);
+    beginRequestLog(request, "index");
     if (url.pathname === "/" || url.pathname === "/api") {
       return jsonResponse({
         ok: true,

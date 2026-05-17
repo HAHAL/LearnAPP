@@ -56,6 +56,10 @@ export async function apiFetch(path, options = {}) {
     }
   }
 
+  if (payload?.logs) {
+    console.log("Edge Function Logs:", payload.logs);
+  }
+
   if (!response.ok) {
     const message = payload?.error || payload?.message || `请求失败：${response.status}`;
     throw new Error(message);

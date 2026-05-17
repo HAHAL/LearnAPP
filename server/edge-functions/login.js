@@ -1,8 +1,9 @@
-import { createToken, emptyUser, errorResponse, getUser, handleOptions, jsonResponse, readJsonBody, sanitizeEmail, saveUser } from "./edge_config.js";
+import { beginRequestLog, createToken, emptyUser, errorResponse, getUser, handleOptions, jsonResponse, readJsonBody, sanitizeEmail, saveUser } from "./edge_config.js";
 
 export default {
   async fetch(request) {
     if (request.method === "OPTIONS") return handleOptions(request);
+    beginRequestLog(request, "login");
     if (request.method !== "POST") return jsonResponse({ message: "仅支持 POST" }, 405, request);
     try {
       const body = await readJsonBody(request);

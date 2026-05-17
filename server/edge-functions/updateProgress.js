@@ -1,8 +1,9 @@
-import { errorResponse, getEmailFromAuth, getUser, handleOptions, jsonResponse, logError, logInfo, readJsonBody, saveUser, userKey } from "./edge_config.js";
+import { beginRequestLog, errorResponse, getEmailFromAuth, getUser, handleOptions, jsonResponse, logError, logInfo, readJsonBody, saveUser, userKey } from "./edge_config.js";
 
 export default {
   async fetch(request) {
     if (request.method === "OPTIONS") return handleOptions(request);
+    beginRequestLog(request, "updateProgress");
     if (request.method !== "POST") return jsonResponse({ message: "仅支持 POST" }, 405, request);
     try {
       const email = getEmailFromAuth(request);
@@ -14,7 +15,7 @@ export default {
         correct: body.correct,
         examTotal: body.exam?.total,
         examScore: body.exam?.score
-      });
+      }, request);
 
       const user = await getUser(email);
       if (body.mode === "exam") {
@@ -30,7 +31,7 @@ export default {
         ossKey,
         answered: user.progress.answered,
         wrongCount: user.wrongAnswers.length
-      });
+      }, request);
 
       return jsonResponse({
         info: "学习进度同步成功",
@@ -40,7 +41,7 @@ export default {
         wrongAnswers: user.wrongAnswers
       }, 200, request);
     } catch (err) {
-      logError("progress sync failed", err);
+      logError("progress sync failed", err, {}, request);
       return errorResponse(err, request);
     }
   }

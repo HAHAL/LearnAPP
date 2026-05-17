@@ -1,12 +1,14 @@
-import { EDGE_CONFIG, errorResponse, getEmailFromAuth, getUser, handleOptions, jsonResponse, readJsonBody, saveUser } from "./edge_config.js";
+import { EDGE_CONFIG, beginRequestLog, errorResponse, getEmailFromAuth, getUser, handleOptions, jsonResponse, logInfo, readJsonBody, saveUser } from "./edge_config.js";
 
 export default {
   async fetch(request) {
     if (request.method === "OPTIONS") return handleOptions(request);
+    beginRequestLog(request, "callAnalysis");
     if (request.method !== "POST") return jsonResponse({ message: "仅支持 POST" }, 405, request);
     try {
       const email = getEmailFromAuth(request);
       const body = await readJsonBody(request);
+      logInfo("analysis requested", { userId: email, questionId: body.question?.id || "" }, request);
       if (!EDGE_CONFIG.MODEL_API_ENABLED) return jsonResponse({ message: "大模型解析未启用" }, 403, request);
       if (!EDGE_CONFIG.MODEL_API_KEY) return jsonResponse({ message: "缺少 MODEL_API_KEY" }, 500, request);
       if (!body.question?.id) return jsonResponse({ message: "缺少 question.id" }, 400, request);

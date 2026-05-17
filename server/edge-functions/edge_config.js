@@ -22,12 +22,16 @@ console.log("[learnapp:init] Edge Function environment", {
 
 const inMemoryStore = globalThis.__LEARN_APP_STORE__ || new Map();
 globalThis.__LEARN_APP_STORE__ = inMemoryStore;
+const requestLogs = globalThis.__LEARN_APP_REQUEST_LOGS__ || new WeakMap();
+globalThis.__LEARN_APP_REQUEST_LOGS__ = requestLogs;
 
 export function jsonResponse(data, status = 200, request) {
   const ok = status >= 200 && status < 400;
+  const message = data?.message || data?.info || (ok ? "OK" : "服务器错误");
+  const logs = request ? getRequestLogs(request) : [];
   const payload = ok
-    ? { status: "success", info: data?.info || "OK", ...data }
-    : { status: "error", message: data?.message || data?.error || "服务器错误", ...data };
+    ? { status: "success", message, info: data?.info || message, data: data?.data ?? data, logs, ...data }
+    : { status: "error", message, data: data?.data ?? null, logs, ...data };
   return new Response(JSON.stringify(payload), {
     status,
     headers: {
@@ -49,6 +53,18 @@ export function corsHeaders(request) {
 
 export function handleOptions(request) {
   return new Response(null, { status: 204, headers: corsHeaders(request) });
+}
+
+export function beginRequestLog(request, functionName) {
+  const logs = [];
+  requestLogs.set(request, logs);
+  logInfo("function triggered", {
+    functionName,
+    method: request.method,
+    url: request.url,
+    env: getEnvironmentStatus()
+  }, request);
+  return logs;
 }
 
 export async function readJsonBody(request) {
@@ -122,24 +138,60 @@ export function userKey(email) {
 }
 
 export function errorResponse(err, request) {
-  console.error("[learnapp:error]", {
+  logError("request failed", err, { status: err.status || 500 }, request);
+  return jsonResponse({ message: err.message || "服务器错误", error: err.message || "服务器错误" }, err.status || 500, request);
+}
+
+export function logInfo(message, details = {}, request) {
+  const entry = {
+    level: "info",
+    message,
+    details,
+    timestamp: new Date().toISOString()
+  };
+  console.log(`[learnapp] ${message}`, details);
+  pushRequestLog(request, entry);
+  return entry;
+}
+
+export function logError(message, err, details = {}, request) {
+  const entry = {
+    level: "error",
+    message,
+    details: {
+      ...details,
+      message: err?.message || String(err)
+    },
+    timestamp: new Date().toISOString()
+  };
+  console.error(`[learnapp] ${message}`, {
+    ...details,
     message: err.message || "服务器错误",
     stack: err.stack,
     status: err.status || 500
   });
-  return jsonResponse({ message: err.message || "服务器错误", error: err.message || "服务器错误" }, err.status || 500, request);
+  pushRequestLog(request, entry);
+  return entry;
 }
 
-export function logInfo(message, details = {}) {
-  console.log(`[learnapp] ${message}`, details);
+export function getEnvironmentStatus() {
+  return {
+    OSS_BUCKET: EDGE_CONFIG.OSS_BUCKET,
+    OSS_REGION: EDGE_CONFIG.OSS_REGION,
+    OSS_ACCESS_KEY_ID_EXISTS: Boolean(EDGE_CONFIG.OSS_ACCESS_KEY_ID),
+    OSS_ACCESS_KEY_SECRET_EXISTS: Boolean(EDGE_CONFIG.OSS_ACCESS_KEY_SECRET),
+    MODEL_API_KEY_EXISTS: Boolean(EDGE_CONFIG.MODEL_API_KEY)
+  };
 }
 
-export function logError(message, err, details = {}) {
-  console.error(`[learnapp] ${message}`, {
-    ...details,
-    message: err?.message || String(err),
-    stack: err?.stack
-  });
+function getRequestLogs(request) {
+  return requestLogs.get(request) || [];
+}
+
+function pushRequestLog(request, entry) {
+  if (!request) return;
+  const logs = requestLogs.get(request);
+  if (logs) logs.push(entry);
 }
 
 function cryptoRandom() {
