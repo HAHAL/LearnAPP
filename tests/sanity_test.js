@@ -1,8 +1,13 @@
-const http = require("http");
+import http from "http";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 
 const store = new Map();
 const PORT = Number(process.env.PORT || 8787);
 const BASE_URL = `http://127.0.0.1:${PORT}`;
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const root = path.resolve(__dirname, "..");
 
 function emptyUser(email) {
   return {
@@ -86,8 +91,30 @@ async function request(path, options = {}) {
 }
 
 async function run() {
+  const requiredFiles = [
+    "package.json",
+    "vite.config.js",
+    "jsconfig.json",
+    "index.html",
+    "src/main.jsx",
+    "src/App.jsx",
+    "src/components/Login.jsx",
+    "src/components/Quiz.jsx",
+    "src/components/Review.jsx",
+    "src/components/Exam.jsx",
+    "server/edge-functions/index.js"
+  ];
+  for (const file of requiredFiles) {
+    if (!fs.existsSync(path.join(root, file))) {
+      console.log(`FAIL missing ${file}`);
+      process.exitCode = 1;
+      return;
+    }
+  }
+
   await new Promise((resolve) => server.listen(PORT, resolve));
   const results = [];
+  results.push(["vite/react files", true]);
   try {
     const login = await request("/login", {
       method: "POST",

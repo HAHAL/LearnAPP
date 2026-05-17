@@ -42,6 +42,12 @@ jobs:
       - name: Install ESA CLI
         run: npm install -g esa-cli
 
+      - name: Install frontend dependencies
+        run: npm install
+
+      - name: Build React + Vite frontend
+        run: npm run build
+
       - name: Validate required secrets
         run: |
           test -n "$ALICLOUD_ACCESS_KEY_ID"

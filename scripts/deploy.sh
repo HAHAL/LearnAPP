@@ -49,6 +49,12 @@ log "Project: $PROJECT_NAME"
 log "CORS_ALLOWED_ORIGINS: $CORS_ALLOWED_ORIGINS"
 log "MODEL_API_ENABLED: $MODEL_API_ENABLED"
 
+log "Installing frontend dependencies"
+npm install
+
+log "Building React + Vite frontend"
+npm run build
+
 log "Initializing project if needed"
 esa-cli project list >/dev/null 2>&1 || esa-cli init || true
 

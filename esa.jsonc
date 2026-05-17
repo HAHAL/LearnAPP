@@ -3,10 +3,10 @@
   // Official ESA Pages reads this file from the repository root.
   "name": "learnapp-question-bank",
   "entry": "./server/edge-functions/index.js",
-  "installCommand": "",
-  "buildCommand": "",
+  "installCommand": "npm install",
+  "buildCommand": "npm run build",
   "assets": {
-    "directory": ".",
+    "directory": "dist",
     "notFoundStrategy": "404Page"
   },
   // Keep API traffic on the Edge Function entry and static traffic on Pages assets.
@@ -17,15 +17,7 @@
       "entry": "./server/edge-functions/index.js"
     },
     {
-      "pattern": "/pages/*",
-      "assets": true
-    },
-    {
-      "pattern": "/js/*",
-      "assets": true
-    },
-    {
-      "pattern": "/css/*",
+      "pattern": "/*",
       "assets": true
     }
   ],
