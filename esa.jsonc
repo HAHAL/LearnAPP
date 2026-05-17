@@ -1,0 +1,42 @@
+{
+  // ESA Pages + Edge Functions deployment configuration.
+  // Official ESA Pages reads this file from the repository root.
+  "name": "learnapp-question-bank",
+  "entry": "./server/edge-functions/index.js",
+  "installCommand": "",
+  "buildCommand": "",
+  "assets": {
+    "directory": ".",
+    "notFoundStrategy": "404Page"
+  },
+  // Keep API traffic on the Edge Function entry and static traffic on Pages assets.
+  // If your ESA console requires route binding, bind /api/* to this project.
+  "routes": [
+    {
+      "pattern": "/api/*",
+      "entry": "./server/edge-functions/index.js"
+    },
+    {
+      "pattern": "/pages/*",
+      "assets": true
+    },
+    {
+      "pattern": "/js/*",
+      "assets": true
+    },
+    {
+      "pattern": "/css/*",
+      "assets": true
+    }
+  ],
+  "env": {
+    "OSS_BUCKET": "${OSS_BUCKET}",
+    "OSS_REGION": "${OSS_REGION}",
+    "OSS_ENDPOINT": "${OSS_ENDPOINT}",
+    "MODEL_API_ENABLED": "${MODEL_API_ENABLED}",
+    "MODEL_API_KEY": "${MODEL_API_KEY}",
+    "MODEL_API_URL": "${MODEL_API_URL}",
+    "MODEL_NAME": "${MODEL_NAME}",
+    "CORS_ALLOWED_ORIGINS": "${CORS_ALLOWED_ORIGINS}"
+  }
+}

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>学习题库 - 练习</title>
+    <link rel="stylesheet" href="../css/style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="logo" href="./quiz.html">学习题库</a>
+      <nav>
+        <a class="active" href="./quiz.html">练习</a>
+        <a href="./review.html">错题</a>
+        <a href="./exam.html">考试</a>
+      </nav>
+    </header>
+
+    <main class="page-grid">
+      <section class="panel">
+        <div class="section-title">
+          <h1>题库练习</h1>
+          <span id="progressText">未载入</span>
+        </div>
+        <label class="upload-box">
+          上传题库 JSON
+          <input id="questionFile" type="file" accept="application/json,.json" />
+        </label>
+        <div id="status" class="message"></div>
+      </section>
+
+      <section class="panel question-panel">
+        <div id="questionMeta" class="muted">请先上传题库 JSON</div>
+        <h2 id="questionText">题目会显示在这里</h2>
+        <form id="answerForm" class="options"></form>
+        <div class="actions">
+          <button id="prevBtn" type="button" class="secondary">上一题</button>
+          <button id="submitBtn" type="button">提交答案</button>
+          <button id="nextBtn" type="button" class="secondary">下一题</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>解析</h2>
+        <div id="analysisBox" class="analysis-box">提交答案后显示解析。</div>
+      </section>
+    </main>
+    <script type="module" src="../js/quiz.js"></script>
+  </body>
+</html>

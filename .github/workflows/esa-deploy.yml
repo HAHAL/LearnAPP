@@ -1,0 +1,58 @@
+name: Deploy to Alibaba Cloud ESA
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: esa-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy Pages and Edge Functions
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    env:
+      ALICLOUD_ACCESS_KEY_ID: ${{ secrets.ALICLOUD_ACCESS_KEY_ID }}
+      ALICLOUD_ACCESS_KEY_SECRET: ${{ secrets.ALICLOUD_ACCESS_KEY_SECRET }}
+      OSS_BUCKET: ${{ secrets.OSS_BUCKET }}
+      OSS_REGION: ${{ secrets.OSS_REGION }}
+      MODEL_API_KEY: ${{ secrets.MODEL_API_KEY }}
+      CORS_ALLOWED_ORIGINS: ${{ secrets.CORS_ALLOWED_ORIGINS }}
+      MODEL_API_ENABLED: ${{ vars.MODEL_API_ENABLED || 'false' }}
+      MODEL_API_URL: ${{ vars.MODEL_API_URL || 'https://api.openai.com/v1/chat/completions' }}
+      MODEL_NAME: ${{ vars.MODEL_NAME || 'gpt-4o-mini' }}
+      ESA_PROJECT_NAME: ${{ vars.ESA_PROJECT_NAME || 'learnapp-question-bank' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install ESA CLI
+        run: npm install -g esa-cli
+
+      - name: Validate required secrets
+        run: |
+          test -n "$ALICLOUD_ACCESS_KEY_ID"
+          test -n "$ALICLOUD_ACCESS_KEY_SECRET"
+          test -n "$OSS_BUCKET"
+          test -n "$OSS_REGION"
+          test -n "$CORS_ALLOWED_ORIGINS"
+
+      - name: Deploy to ESA
+        run: bash scripts/deploy.sh
+
+      - name: Show ESA deployments
+        if: always()
+        run: esa-cli deployments list || true

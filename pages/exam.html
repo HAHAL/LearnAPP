@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>学习题库 - 模拟考试</title>
+    <link rel="stylesheet" href="../css/style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="logo" href="./quiz.html">学习题库</a>
+      <nav>
+        <a href="./quiz.html">练习</a>
+        <a href="./review.html">错题</a>
+        <a class="active" href="./exam.html">考试</a>
+      </nav>
+    </header>
+
+    <main class="page-grid">
+      <section class="panel">
+        <div class="section-title">
+          <h1>模拟考试</h1>
+          <strong id="timer">00:00</strong>
+        </div>
+        <label class="upload-box">
+          上传题库 JSON
+          <input id="questionFile" type="file" accept="application/json,.json" />
+        </label>
+        <div class="exam-controls">
+          <label>抽题数 <input id="examCount" type="number" min="1" max="100" value="10" /></label>
+          <label>分钟 <input id="examMinutes" type="number" min="1" max="240" value="20" /></label>
+        </div>
+        <div class="actions">
+          <button id="startBtn" type="button">开始考试</button>
+          <button id="finishBtn" type="button" class="danger">交卷</button>
+        </div>
+        <div id="status" class="message"></div>
+      </section>
+
+      <section class="panel question-panel">
+        <div id="questionMeta" class="muted">请上传题库并开始考试</div>
+        <h2 id="questionText">题目会显示在这里</h2>
+        <form id="answerForm" class="options"></form>
+        <div class="actions">
+          <button id="prevBtn" type="button" class="secondary">上一题</button>
+          <button id="nextBtn" type="button" class="secondary">下一题</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>成绩与反馈</h2>
+        <div id="resultBox" class="analysis-box">交卷后显示成绩。</div>
+      </section>
+    </main>
+    <script type="module" src="../js/exam.js"></script>
+  </body>
+</html>

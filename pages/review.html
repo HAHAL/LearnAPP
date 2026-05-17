@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>学习题库 - 错题复习</title>
+    <link rel="stylesheet" href="../css/style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="logo" href="./quiz.html">学习题库</a>
+      <nav>
+        <a href="./quiz.html">练习</a>
+        <a class="active" href="./review.html">错题</a>
+        <a href="./exam.html">考试</a>
+      </nav>
+    </header>
+
+    <main class="page-grid">
+      <section class="panel">
+        <div class="section-title">
+          <h1>错题复习</h1>
+          <span id="countText">0 题</span>
+        </div>
+        <input id="filterInput" class="search" type="search" placeholder="筛选题干或标签" />
+        <div id="status" class="message"></div>
+      </section>
+      <section class="panel list-panel">
+        <div id="wrongList" class="wrong-list"></div>
+        <div class="actions">
+          <button id="prevPage" type="button" class="secondary">上一页</button>
+          <span id="pageText" class="muted">1 / 1</span>
+          <button id="nextPage" type="button" class="secondary">下一页</button>
+        </div>
+      </section>
+      <section class="panel">
+        <h2>解析详情</h2>
+        <div id="detailBox" class="analysis-box">点击错题查看解析。</div>
+      </section>
+    </main>
+    <script type="module" src="../js/review.js"></script>
+  </body>
+</html>
