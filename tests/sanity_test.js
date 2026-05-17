@@ -2,6 +2,7 @@ import http from "http";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { areAnswersEqual, normalizeQuestion, normalizeQuestionList } from "../js/config.js";
 
 const store = new Map();
 const PORT = Number(process.env.PORT || 8787);
@@ -115,6 +116,31 @@ async function run() {
   await new Promise((resolve) => server.listen(PORT, resolve));
   const results = [];
   results.push(["vite/react files", true]);
+  results.push(["single question with one option", normalizeQuestion({
+    id: "legacy-single-one",
+    type: "single",
+    question: "只有一个选项也可以导入吗？",
+    options: { A: "可以" },
+    answer: ["A"]
+  }).answer === "A"]);
+  results.push(["multiple question with one option", Array.isArray(normalizeQuestion({
+    id: "legacy-multiple-one",
+    type: "multiple",
+    question: "多选题只有一个选项也可以导入吗？",
+    options: { A: "可以" },
+    answer: ["A"]
+  }).answer)]);
+  results.push(["legacy object options", normalizeQuestionList({
+    questions: [{
+      id: "legacy-object-options",
+      type: "multiple",
+      question: "对象格式 options 是否兼容？",
+      options: { A: "兼容", C: "也兼容" },
+      answer: ["C", "A"]
+    }]
+  })[0].options.length === 2]);
+  results.push(["multiple answer order compare", areAnswersEqual(["C", "A"], ["A", "C"])]);
+  results.push(["invalid type rejected", rejectsInvalidType()]);
   try {
     const login = await request("/login", {
       method: "POST",
@@ -149,6 +175,21 @@ async function run() {
   for (const [name, ok] of results) {
     console.log(`${ok ? "PASS" : "FAIL"} ${name}`);
     if (!ok) process.exitCode = 1;
+  }
+}
+
+function rejectsInvalidType() {
+  try {
+    normalizeQuestion({
+      id: "invalid-type",
+      type: "judge",
+      question: "非法类型应被拒绝",
+      options: { A: "是" },
+      answer: "A"
+    });
+    return false;
+  } catch (err) {
+    return err.message.includes("type 必须是 single 或 multiple");
   }
 }
 

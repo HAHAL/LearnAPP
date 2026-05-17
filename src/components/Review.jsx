@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { apiFetch } from "../../js/config.js";
+import { apiFetch, formatAnswer } from "../../js/config.js";
 
 const pageSize = 8;
 
@@ -80,8 +80,8 @@ export default function Review() {
           {selected ? (
             <>
               <h3>{selected.question?.question || selected.questionId}</h3>
-              <p><strong>你的答案：</strong>{selected.answer || "-"}</p>
-              <p><strong>正确答案：</strong>{selected.question?.answer || "-"}</p>
+              <p><strong>你的答案：</strong>{formatAnswer(selected.answer)}</p>
+              <p><strong>正确答案：</strong>{formatAnswer(selected.question?.answerKeys || selected.question?.answer)}</p>
               <p>{selected.analysis || selected.question?.explanation || "暂无解析"}</p>
             </>
           ) : "点击错题查看解析。"}

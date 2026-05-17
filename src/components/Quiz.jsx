@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { apiFetch } from "../../js/config.js";
+import { apiFetch, areAnswersEqual, formatAnswer } from "../../js/config.js";
 import { getAnalysis } from "../../js/analysis.js";
 import { loadCachedQuestions, loadQuestionsFromFile } from "../../js/oss_api.js";
 
@@ -23,7 +23,7 @@ export default function Quiz() {
       const loaded = await loadQuestionsFromFile(event.target.files[0]);
       setQuestions(loaded);
       setCurrentIndex(0);
-      setSelected("");
+      setSelected(initialSelection(loaded[0]));
       setAnalysis("提交答案后显示解析。");
       showStatus(`已载入 ${loaded.length} 道题`, "success");
     } catch (err) {
@@ -33,23 +33,24 @@ export default function Quiz() {
 
   async function submitAnswer() {
     if (!question) return showStatus("当前没有可提交的题目", "error");
-    if (!selected) return showStatus("请选择一个答案", "error");
-    const correct = selected === question.answer;
+    if (!hasSelection(question, selected)) return showStatus("请选择一个答案", "error");
+    const submittedAnswer = normalizeSelection(question, selected);
+    const correct = areAnswersEqual(submittedAnswer, question.answerKeys);
     setLoading(true);
     try {
-      const explanation = await getAnalysis(question, selected, correct);
+      const explanation = await getAnalysis(question, submittedAnswer, correct);
       await apiFetch("/submitAnswer", {
         method: "POST",
         body: JSON.stringify({
           mode: "practice",
           questionId: question.id,
           question,
-          answer: selected,
+          answer: submittedAnswer,
           correct,
           analysis: explanation
         })
       });
-      setAnalysis(`${correct ? "回答正确" : `回答错误，正确答案：${question.answer}`}\n\n${explanation}`);
+      setAnalysis(`${correct ? "回答正确" : `回答错误，正确答案：${formatAnswer(question.answerKeys)}`}\n\n${explanation}`);
       showStatus("已同步进度", "success");
     } catch (err) {
       showStatus(err.message || "提交失败", "error");
@@ -61,8 +62,20 @@ export default function Quiz() {
   function move(delta) {
     const nextIndex = Math.min(questions.length - 1, Math.max(0, currentIndex + delta));
     setCurrentIndex(nextIndex);
-    setSelected("");
+    setSelected(initialSelection(questions[nextIndex]));
     setAnalysis("提交答案后显示解析。");
+  }
+
+  function toggleOption(optionKey) {
+    if (!question) return;
+    if (question.type === "multiple") {
+      setSelected((value) => {
+        const current = Array.isArray(value) ? value : [];
+        return current.includes(optionKey) ? current.filter((item) => item !== optionKey) : [...current, optionKey];
+      });
+      return;
+    }
+    setSelected(optionKey);
   }
 
   function showStatus(text, type = "") {
@@ -90,7 +103,13 @@ export default function Quiz() {
         <form className="options">
           {(question?.options || []).map((option) => (
             <label className="option" key={option.key}>
-              <input type="radio" name="answer" value={option.key} checked={selected === option.key} onChange={() => setSelected(option.key)} />
+              <input
+                type={question.type === "multiple" ? "checkbox" : "radio"}
+                name="answer"
+                value={option.key}
+                checked={isSelected(question, selected, option.key)}
+                onChange={() => toggleOption(option.key)}
+              />
               <strong>{option.key}.</strong>
               <span>{option.text}</span>
             </label>
@@ -109,4 +128,21 @@ export default function Quiz() {
       </section>
     </main>
   );
+}
+
+function initialSelection(question) {
+  return question?.type === "multiple" ? [] : "";
+}
+
+function isSelected(question, selected, optionKey) {
+  if (question?.type === "multiple") return Array.isArray(selected) && selected.includes(optionKey);
+  return selected === optionKey;
+}
+
+function hasSelection(question, selected) {
+  return question?.type === "multiple" ? Array.isArray(selected) && selected.length > 0 : Boolean(selected);
+}
+
+function normalizeSelection(question, selected) {
+  return question?.type === "multiple" ? [...selected].sort() : selected;
 }

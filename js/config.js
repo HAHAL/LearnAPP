@@ -66,33 +66,27 @@ export async function apiFetch(path, options = {}) {
 export function normalizeQuestion(raw, index = 0) {
   if (!raw || typeof raw !== "object") throw new Error(`第 ${index + 1} 题格式错误`);
   const id = String(raw.id || raw.questionId || `q-${index + 1}`);
+  const type = String(raw.type || "").trim().toLowerCase();
   const text = String(raw.question || raw.text || raw.title || "").trim();
-  const optionsSource = raw.options || raw.choices || [];
+  const optionsSource = raw.options ?? raw.choices ?? [];
   const answer = raw.answer ?? raw.correctAnswer;
+  if (!["single", "multiple"].includes(type)) throw new Error(`第 ${index + 1} 题 type 必须是 single 或 multiple`);
   if (!text) throw new Error(`第 ${index + 1} 题缺少题干`);
-  if (!Array.isArray(optionsSource) || optionsSource.length < 2) throw new Error(`第 ${index + 1} 题至少需要两个选项`);
+  if (answer === undefined || answer === null || answer === "") throw new Error(`第 ${index + 1} 题缺少答案`);
 
-  const options = optionsSource.map((option, optionIndex) => {
-    if (typeof option === "object") {
-      return {
-        key: String(option.key ?? option.label ?? String.fromCharCode(65 + optionIndex)),
-        text: String(option.text ?? option.value ?? "")
-      };
-    }
-    return {
-      key: String.fromCharCode(65 + optionIndex),
-      text: String(option)
-    };
-  });
+  const options = normalizeOptions(optionsSource, index);
+  if (options.length < 1) throw new Error(`第 ${index + 1} 题至少需要一个选项`);
 
-  const normalizedAnswer = typeof answer === "number" ? options[answer]?.key : String(answer ?? "").trim();
-  if (!normalizedAnswer) throw new Error(`第 ${index + 1} 题缺少答案`);
+  const answerKeys = normalizeAnswerKeys(answer, options);
+  if (!answerKeys.length) throw new Error(`第 ${index + 1} 题缺少答案`);
 
   return {
     id,
+    type,
     question: text,
     options,
-    answer: normalizedAnswer,
+    answer: type === "single" ? answerKeys[0] : answerKeys,
+    answerKeys,
     explanation: String(raw.explanation || raw.analysis || ""),
     tags: Array.isArray(raw.tags) ? raw.tags : []
   };
@@ -102,4 +96,58 @@ export function normalizeQuestionList(raw) {
   const list = Array.isArray(raw) ? raw : raw?.questions;
   if (!Array.isArray(list) || list.length === 0) throw new Error("题库 JSON 必须包含非空 questions 数组或题目数组");
   return list.map(normalizeQuestion);
+}
+
+export function areAnswersEqual(userAnswer, correctAnswer) {
+  const left = normalizeComparableAnswer(userAnswer);
+  const right = normalizeComparableAnswer(correctAnswer);
+  if (left.length !== right.length) return false;
+  return left.every((value, index) => value === right[index]);
+}
+
+export function formatAnswer(answer) {
+  const values = normalizeComparableAnswer(answer);
+  return values.length ? values.join(", ") : "-";
+}
+
+function normalizeOptions(optionsSource, index) {
+  if (Array.isArray(optionsSource)) {
+    return optionsSource.map((option, optionIndex) => {
+      if (option && typeof option === "object") {
+        return {
+          key: String(option.key ?? option.label ?? String.fromCharCode(65 + optionIndex)).trim(),
+          text: String(option.text ?? option.value ?? "")
+        };
+      }
+      return {
+        key: String.fromCharCode(65 + optionIndex),
+        text: String(option)
+      };
+    }).filter((option) => option.key && option.text);
+  }
+
+  if (optionsSource && typeof optionsSource === "object") {
+    return Object.entries(optionsSource).map(([key, value]) => ({
+      key: String(key).trim(),
+      text: String(value)
+    })).filter((option) => option.key && option.text);
+  }
+
+  throw new Error(`第 ${index + 1} 题 options 必须是数组或对象`);
+}
+
+function normalizeAnswerKeys(answer, options) {
+  const values = Array.isArray(answer) ? answer : [answer];
+  return values.map((value) => {
+    if (typeof value === "number") return options[value]?.key || "";
+    return String(value ?? "").trim();
+  }).filter(Boolean);
+}
+
+function normalizeComparableAnswer(answer) {
+  if (answer === undefined || answer === null || answer === "") return [];
+  return (Array.isArray(answer) ? answer : [answer])
+    .map((value) => String(value ?? "").trim())
+    .filter(Boolean)
+    .sort();
 }

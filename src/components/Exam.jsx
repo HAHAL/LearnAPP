@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { apiFetch } from "../../js/config.js";
+import { apiFetch, areAnswersEqual, formatAnswer } from "../../js/config.js";
 import { loadQuestionsFromFile } from "../../js/oss_api.js";
 
 export default function Exam() {
@@ -61,12 +61,12 @@ export default function Exam() {
   async function finishExam() {
     if (!examQuestions.length) return showStatus("尚未开始考试", "error");
     const details = examQuestions.map((item) => {
-      const answer = answers[item.id] || "";
+      const answer = normalizeStoredAnswer(item, answers[item.id]);
       return {
         questionId: item.id,
         question: item,
         answer,
-        correct: answer === item.answer,
+        correct: areAnswersEqual(answer, item.answerKeys),
         analysis: item.explanation || ""
       };
     });
@@ -96,6 +96,14 @@ export default function Exam() {
 
   function choose(optionKey) {
     if (!question) return;
+    if (question.type === "multiple") {
+      setAnswers((value) => {
+        const current = Array.isArray(value[question.id]) ? value[question.id] : [];
+        const next = current.includes(optionKey) ? current.filter((item) => item !== optionKey) : [...current, optionKey];
+        return { ...value, [question.id]: next };
+      });
+      return;
+    }
     setAnswers((value) => ({ ...value, [question.id]: optionKey }));
   }
 
@@ -136,7 +144,13 @@ export default function Exam() {
         <form className="options">
           {(question?.options || []).map((option) => (
             <label className="option" key={option.key}>
-              <input type="radio" name="answer" value={option.key} checked={answers[question.id] === option.key} onChange={() => choose(option.key)} />
+              <input
+                type={question.type === "multiple" ? "checkbox" : "radio"}
+                name="answer"
+                value={option.key}
+                checked={isSelected(question, answers[question.id], option.key)}
+                onChange={() => choose(option.key)}
+              />
               <strong>{option.key}.</strong>
               <span>{option.text}</span>
             </label>
@@ -155,7 +169,7 @@ export default function Exam() {
             <>
               <h3>得分：{result.score} / {result.total}</h3>
               {result.wrong.length ? result.wrong.map((item) => (
-                <p key={item.questionId}>{item.question.question}<br />你的答案：{item.answer || "未答"}，正确答案：{item.question.answer}</p>
+                <p key={item.questionId}>{item.question.question}<br />你的答案：{formatAnswer(item.answer)}，正确答案：{formatAnswer(item.question.answerKeys || item.question.answer)}</p>
               )) : <p>全部答对。</p>}
             </>
           )}
@@ -171,4 +185,14 @@ function shuffle(items) {
     [items[i], items[j]] = [items[j], items[i]];
   }
   return items;
+}
+
+function isSelected(question, answer, optionKey) {
+  if (question?.type === "multiple") return Array.isArray(answer) && answer.includes(optionKey);
+  return answer === optionKey;
+}
+
+function normalizeStoredAnswer(question, answer) {
+  if (question?.type === "multiple") return Array.isArray(answer) ? [...answer].sort() : [];
+  return answer || "";
 }
