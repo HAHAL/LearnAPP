@@ -1,4 +1,4 @@
-import { beginRequestLog, errorResponse, getEmailFromAuth, getUser, handleOptions, jsonResponse, logError, logInfo, readJsonBody, saveUser, userKey } from "./edge_config.js";
+import { beginRequestLog, errorResponse, getEmailFromAuth, getUser, handleOptions, jsonResponse, logError, logInfo, ossPutJson, questionBankKey, readJsonBody, saveUser, userKey } from "./edge_config.js";
 
 export default {
   async fetch(request) {
@@ -32,7 +32,9 @@ export default {
         uploadedBy: String(body.uploadedBy || email),
         uploadedAt: body.uploadedAt || new Date().toISOString()
       };
+      bank.ossKey = questionBankKey(email, bank.id);
       user.questionBanks = [bank, ...user.questionBanks.filter((item) => item.id !== bank.id)].slice(0, 20);
+      await ossPutJson(bank.ossKey, bank);
       await saveUser(user);
 
       const ossKey = userKey(email);
@@ -54,7 +56,8 @@ export default {
           fileName: bank.fileName,
           count: bank.count,
           uploadedBy: bank.uploadedBy,
-          uploadedAt: bank.uploadedAt
+          uploadedAt: bank.uploadedAt,
+          ossKey: bank.ossKey
         }
       }, 200, request);
     } catch (err) {

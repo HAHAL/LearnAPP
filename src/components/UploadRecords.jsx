@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { deleteQuestionBankRecord, downloadQuestionBank, getUploadRecords, uploadQuestionsFromFile } from "../../js/oss_api.js";
+import { deleteQuestionBankRecord, downloadQuestionBank, getUploadRecords, refreshUploadRecordsFromEdge, uploadQuestionsFromFile } from "../../js/oss_api.js";
 
 export default function UploadRecords({ onQuestionsLoaded, title = "题库上传" }) {
   const [records, setRecords] = useState(() => getUploadRecords());
@@ -9,6 +9,9 @@ export default function UploadRecords({ onQuestionsLoaded, title = "题库上传
 
   useEffect(() => {
     setRecords(getUploadRecords());
+    refreshUploadRecordsFromEdge()
+      .then(setRecords)
+      .catch(() => {});
   }, []);
 
   async function handleUpload(event) {

@@ -1,4 +1,4 @@
-import { beginRequestLog, deleteUserQuestionBank, errorResponse, getEmailFromAuth, getUserQuestionBank, handleOptions, jsonResponse, logError, logInfo, readJsonBody, userKey } from "./edge_config.js";
+import { beginRequestLog, deleteUserQuestionBank, errorResponse, getEmailFromAuth, getUser, getUserQuestionBank, handleOptions, jsonResponse, logError, logInfo, ossDelete, ossGetJson, questionBankKey, readJsonBody, userKey } from "./edge_config.js";
 
 export async function downloadQuestionBank(request) {
   if (request.method === "OPTIONS") return handleOptions(request);
@@ -7,8 +7,8 @@ export async function downloadQuestionBank(request) {
   try {
     const email = getEmailFromAuth(request);
     const bankId = await getBankId(request);
-    const bank = await getUserQuestionBank(email, bankId, request);
-    const ossKey = userKey(email);
+    const ossKey = questionBankKey(email, bankId);
+    const bank = await ossGetJson(ossKey) || await getUserQuestionBank(email, bankId, request);
     logInfo("OSS GET question bank success", {
       userId: email,
       bankId,
@@ -35,10 +35,10 @@ export async function deleteQuestionBank(request) {
   try {
     const email = getEmailFromAuth(request);
     const bankId = await getBankId(request);
-    const ossKey = userKey(email);
-    logInfo("OSS DELETE start", { userId: email, bankId, key: `${ossKey}#questionBanks/${bankId}` }, request);
+    const ossKey = questionBankKey(email, bankId);
+    await ossDelete(ossKey);
     const user = await deleteUserQuestionBank(email, bankId, request);
-    logInfo("OSS DELETE success", { userId: email, bankId, key: `${ossKey}#questionBanks/${bankId}`, remaining: user.questionBanks.length }, request);
+    logInfo("question bank delete success", { userId: email, bankId, key: ossKey, remaining: user.questionBanks.length }, request);
     return jsonResponse({
       info: "题库删除成功",
       ossKey,
@@ -48,6 +48,25 @@ export async function deleteQuestionBank(request) {
   } catch (err) {
     logError("OSS DELETE failed", err, {}, request);
     logError("question bank delete failed", err, {}, request);
+    return errorResponse(err, request);
+  }
+}
+
+export async function listQuestionBanks(request) {
+  if (request.method === "OPTIONS") return handleOptions(request);
+  if (request.method !== "GET") return jsonResponse({ message: "仅支持 GET" }, 405, request);
+  beginRequestLog(request, "getQuestionsList");
+  try {
+    const email = getEmailFromAuth(request);
+    const user = await getUser(email);
+    const banks = (user.questionBanks || []).map(({ questions, ...bank }) => bank);
+    logInfo("question bank list read success", { userId: email, ossKey: userKey(email), count: banks.length }, request);
+    return jsonResponse({
+      info: "题库列表读取成功",
+      questionBanks: banks
+    }, 200, request);
+  } catch (err) {
+    logError("question bank list failed", err, {}, request);
     return errorResponse(err, request);
   }
 }

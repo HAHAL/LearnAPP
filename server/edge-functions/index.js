@@ -5,7 +5,7 @@ import getProgress from "./getProgress.js";
 import getWrongQuestions from "./getWrongQuestions.js";
 import callAnalysis from "./callAnalysis.js";
 import uploadQuestions from "./uploadQuestions.js";
-import { deleteQuestionBank, downloadQuestionBank } from "./questionBank.js";
+import { deleteQuestionBank, downloadQuestionBank, listQuestionBanks } from "./questionBank.js";
 import { beginRequestLog, handleOptions, jsonResponse, withCurrentRequest } from "./edge_config.js";
 
 const routes = new Map([
@@ -26,7 +26,9 @@ const routes = new Map([
   ["/api/downloadQuestions", { fetch: downloadQuestionBank }],
   ["/downloadQuestions", { fetch: downloadQuestionBank }],
   ["/api/deleteQuestions", { fetch: deleteQuestionBank }],
-  ["/deleteQuestions", { fetch: deleteQuestionBank }]
+  ["/deleteQuestions", { fetch: deleteQuestionBank }],
+  ["/api/getQuestionsList", { fetch: listQuestionBanks }],
+  ["/getQuestionsList", { fetch: listQuestionBanks }]
 ]);
 
 export default {
@@ -38,7 +40,7 @@ export default {
       return jsonResponse({
         ok: true,
         service: "learnapp-edge-api",
-        endpoints: ["/api/login", "/api/uploadQuestions", "/api/downloadQuestions", "/api/deleteQuestions", "/api/updateProgress", "/api/submitAnswer", "/api/getProgress", "/api/getWrongQuestions", "/api/callAnalysis"]
+        endpoints: ["/api/login", "/api/uploadQuestions", "/api/downloadQuestions", "/api/deleteQuestions", "/api/getQuestionsList", "/api/updateProgress", "/api/submitAnswer", "/api/getProgress", "/api/getWrongQuestions", "/api/callAnalysis"]
       }, 200, request);
     }
 

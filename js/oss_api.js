@@ -46,6 +46,7 @@ export async function uploadQuestionsFromFile(file) {
     uploadedAt: String(bank.uploadedAt || uploadedAt),
     uploadedBy,
     count: Number(bank.count || questions.length),
+    ossKey: bank.ossKey || result?.ossKey || "",
     questions
   };
   saveUploadRecord(record);
@@ -69,6 +70,20 @@ export function getUploadRecords() {
   } catch {
     return [];
   }
+}
+
+export async function refreshUploadRecordsFromEdge() {
+  const result = await apiFetch("/getQuestionsList");
+  const records = (result?.questionBanks || []).map((bank) => ({
+    id: String(bank.id),
+    fileName: String(bank.fileName || bank.name || "questions.json"),
+    uploadedAt: String(bank.uploadedAt || ""),
+    uploadedBy: String(bank.uploadedBy || ""),
+    count: Number(bank.count || 0),
+    ossKey: bank.ossKey || ""
+  }));
+  localStorage.setItem(UPLOAD_RECORDS_KEY, JSON.stringify(records));
+  return records;
 }
 
 export function saveUploadRecord(record) {

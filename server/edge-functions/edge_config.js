@@ -1,15 +1,15 @@
 export const EDGE_CONFIG = {
-  OSS_BUCKET: globalThis.OSS_BUCKET || "learnapp-user-data",
-  OSS_REGION: globalThis.OSS_REGION || "oss-cn-hangzhou",
-  OSS_ENDPOINT: globalThis.OSS_ENDPOINT || "",
-  OSS_ACCESS_KEY_ID: globalThis.OSS_ACCESS_KEY_ID || "",
-  OSS_ACCESS_KEY_SECRET: globalThis.OSS_ACCESS_KEY_SECRET || "",
-  MODEL_API_ENABLED: String(globalThis.MODEL_API_ENABLED || "false") === "true",
-  MODEL_API_URL: globalThis.MODEL_API_URL || "https://api.openai.com/v1/chat/completions",
-  MODEL_NAME: globalThis.MODEL_NAME || "gpt-4o-mini",
-  MODEL_API_KEY: globalThis.MODEL_API_KEY || "",
-  LOG_LEVEL: globalThis.LOG_LEVEL || "info",
-  CORS_ALLOWED_ORIGINS: (globalThis.CORS_ALLOWED_ORIGINS || "*").split(",").map((item) => item.trim())
+  OSS_BUCKET: getEnv("OSS_BUCKET", "learnapp-user-data"),
+  OSS_REGION: getEnv("OSS_REGION", "oss-cn-hangzhou"),
+  OSS_ENDPOINT: getEnv("OSS_ENDPOINT", ""),
+  OSS_ACCESS_KEY_ID: getEnv("OSS_ACCESS_KEY_ID", ""),
+  OSS_ACCESS_KEY_SECRET: getEnv("OSS_ACCESS_KEY_SECRET", ""),
+  MODEL_API_ENABLED: String(getEnv("MODEL_API_ENABLED", "false")) === "true",
+  MODEL_API_URL: getEnv("MODEL_API_URL", "https://api.openai.com/v1/chat/completions"),
+  MODEL_NAME: getEnv("MODEL_NAME", "gpt-4o-mini"),
+  MODEL_API_KEY: getEnv("MODEL_API_KEY", ""),
+  LOG_LEVEL: getEnv("LOG_LEVEL", "info"),
+  CORS_ALLOWED_ORIGINS: getEnv("CORS_ALLOWED_ORIGINS", "*").split(",").map((item) => item.trim())
 };
 
 console.log("[learnapp:init] Edge Function environment", {
@@ -56,17 +56,22 @@ export function handleOptions(request) {
 }
 
 export function beginRequestLog(request, functionName) {
-  const logs = [];
-  requestLogs.set(request, logs);
+  if (!requestLogs.has(request)) requestLogs.set(request, []);
   globalThis.__LEARN_APP_CURRENT_REQUEST__ = request;
   logInfo("function triggered", {
     functionName,
-    triggeredAt: new Date().toISOString(),
+    timestamp: new Date().toISOString(),
     method: request.method,
-    url: request.url,
-    env: getEnvironmentStatus()
+    url: request.url
   }, request);
-  return logs;
+  logInfo("ENV", {
+    OSS_BUCKET: EDGE_CONFIG.OSS_BUCKET,
+    OSS_REGION: EDGE_CONFIG.OSS_REGION,
+    HAS_OSS_KEY: Boolean(EDGE_CONFIG.OSS_ACCESS_KEY_ID),
+    HAS_SECRET: Boolean(EDGE_CONFIG.OSS_ACCESS_KEY_SECRET),
+    HAS_MODEL_API_KEY: Boolean(EDGE_CONFIG.MODEL_API_KEY)
+  }, request);
+  return getRequestLogs(request);
 }
 
 export async function readJsonBody(request) {
@@ -139,6 +144,10 @@ export function userKey(email) {
   return `users/${encodeURIComponent(email)}.json`;
 }
 
+export function questionBankKey(email, bankId) {
+  return `users/${encodeURIComponent(email)}/questionBanks/${encodeURIComponent(bankId)}.json`;
+}
+
 export function errorResponse(err, request) {
   logError("request failed", err, { status: err.status || 500 }, request);
   return jsonResponse({ message: err.message || "服务器错误", error: err.message || "服务器错误" }, err.status || 500, request);
@@ -203,22 +212,31 @@ function cryptoRandom() {
 }
 
 async function readUserJson(key) {
+  return ossGetJson(key);
+}
+
+export async function ossGetJson(key) {
   logInfo("OSS GET start", { key, bucket: EDGE_CONFIG.OSS_BUCKET, provider: globalThis.OSS?.get ? "binding" : "http" }, currentRequest());
   if (globalThis.OSS?.get) {
     try {
       const value = await globalThis.OSS.get(key);
-      logInfo("OSS GET success", { key, bucket: EDGE_CONFIG.OSS_BUCKET, found: Boolean(value), provider: "binding" }, currentRequest());
+      logInfo("OSS GET result", { key, bucket: EDGE_CONFIG.OSS_BUCKET, object: summarizeOssResult(value), found: Boolean(value), provider: "binding" }, currentRequest());
       if (!value) return null;
       return typeof value.json === "function" ? value.json() : JSON.parse(String(value));
     } catch (err) {
-      logError("OSS GET failed", err, { key, bucket: EDGE_CONFIG.OSS_BUCKET, provider: "binding" }, currentRequest());
+      if (isMissingObjectError(err)) {
+        logInfo("OSS GET result", { key, bucket: EDGE_CONFIG.OSS_BUCKET, object: null, found: false, provider: "binding" }, currentRequest());
+        return null;
+      }
+      logError("OSS ERROR", err, { operation: "GET", key, bucket: EDGE_CONFIG.OSS_BUCKET, provider: "binding" }, currentRequest());
       throw err;
     }
   }
 
   if (!EDGE_CONFIG.OSS_ENDPOINT) {
-    logInfo("OSS GET skipped", { key, bucket: EDGE_CONFIG.OSS_BUCKET, reason: "OSS_ENDPOINT not configured" }, currentRequest());
-    return null;
+    const err = httpError(500, "OSS 未配置：缺少 ESA OSS 绑定或 OSS_ENDPOINT");
+    logError("OSS ERROR", err, { operation: "GET", key, bucket: EDGE_CONFIG.OSS_BUCKET }, currentRequest());
+    throw err;
   }
   try {
     const response = await fetch(`${EDGE_CONFIG.OSS_ENDPOINT.replace(/\/$/, "")}/${key}`, {
@@ -226,35 +244,41 @@ async function readUserJson(key) {
       headers: ossHeaders()
     });
     if (response.status === 404) {
-      logInfo("OSS GET success", { key, bucket: EDGE_CONFIG.OSS_BUCKET, found: false, provider: "http" }, currentRequest());
+      logInfo("OSS GET result", { key, bucket: EDGE_CONFIG.OSS_BUCKET, object: null, found: false, provider: "http", status: 404 }, currentRequest());
       return null;
     }
     if (!response.ok) throw httpError(502, `OSS 读取失败：${response.status}`);
-    logInfo("OSS GET success", { key, bucket: EDGE_CONFIG.OSS_BUCKET, found: true, provider: "http" }, currentRequest());
-    return response.json();
+    const object = await response.json();
+    logInfo("OSS GET result", { key, bucket: EDGE_CONFIG.OSS_BUCKET, object: summarizeOssResult(object), found: true, provider: "http", status: response.status }, currentRequest());
+    return object;
   } catch (err) {
-    logError("OSS GET failed", err, { key, bucket: EDGE_CONFIG.OSS_BUCKET, provider: "http" }, currentRequest());
+    logError("OSS ERROR", err, { operation: "GET", key, bucket: EDGE_CONFIG.OSS_BUCKET, provider: "http" }, currentRequest());
     throw err;
   }
 }
 
 async function writeUserJson(key, user) {
-  const body = JSON.stringify(user);
-  logInfo("OSS PUT start", { key, bucket: EDGE_CONFIG.OSS_BUCKET, size: body.length, provider: globalThis.OSS?.put ? "binding" : "http" }, currentRequest());
+  return ossPutJson(key, user);
+}
+
+export async function ossPutJson(key, value) {
+  const body = JSON.stringify(value);
+  logInfo("OSS PUT start", { key, bucket: EDGE_CONFIG.OSS_BUCKET, contentPreview: body.slice(0, 200), size: body.length, provider: globalThis.OSS?.put ? "binding" : "http" }, currentRequest());
   if (globalThis.OSS?.put) {
     try {
-      await globalThis.OSS.put(key, body, { httpMetadata: { contentType: "application/json; charset=utf-8" } });
-      logInfo("OSS PUT success", { key, bucket: EDGE_CONFIG.OSS_BUCKET, size: body.length, provider: "binding" }, currentRequest());
+      const putResult = await globalThis.OSS.put(key, body, { httpMetadata: { contentType: "application/json; charset=utf-8" } });
+      logInfo("OSS PUT result", { key, bucket: EDGE_CONFIG.OSS_BUCKET, putResult: summarizeOssResult(putResult), provider: "binding" }, currentRequest());
     } catch (err) {
-      logError("OSS PUT failed", err, { key, bucket: EDGE_CONFIG.OSS_BUCKET, size: body.length, provider: "binding" }, currentRequest());
+      logError("OSS ERROR", err, { operation: "PUT", key, bucket: EDGE_CONFIG.OSS_BUCKET, provider: "binding" }, currentRequest());
       throw err;
     }
     return;
   }
 
   if (!EDGE_CONFIG.OSS_ENDPOINT) {
-    logInfo("OSS PUT skipped", { key, bucket: EDGE_CONFIG.OSS_BUCKET, reason: "OSS_ENDPOINT not configured" }, currentRequest());
-    return;
+    const err = httpError(500, "OSS 未配置：缺少 ESA OSS 绑定或 OSS_ENDPOINT");
+    logError("OSS ERROR", err, { operation: "PUT", key, bucket: EDGE_CONFIG.OSS_BUCKET }, currentRequest());
+    throw err;
   }
   try {
     const response = await fetch(`${EDGE_CONFIG.OSS_ENDPOINT.replace(/\/$/, "")}/${key}`, {
@@ -266,9 +290,41 @@ async function writeUserJson(key, user) {
       body
     });
     if (!response.ok) throw httpError(502, `OSS 写入失败：${response.status}`);
-    logInfo("OSS PUT success", { key, bucket: EDGE_CONFIG.OSS_BUCKET, size: body.length, provider: "http" }, currentRequest());
+    logInfo("OSS PUT result", { key, bucket: EDGE_CONFIG.OSS_BUCKET, putResult: { status: response.status, ok: response.ok }, provider: "http" }, currentRequest());
   } catch (err) {
-    logError("OSS PUT failed", err, { key, bucket: EDGE_CONFIG.OSS_BUCKET, size: body.length, provider: "http" }, currentRequest());
+    logError("OSS ERROR", err, { operation: "PUT", key, bucket: EDGE_CONFIG.OSS_BUCKET, provider: "http" }, currentRequest());
+    throw err;
+  }
+}
+
+export async function ossDelete(key) {
+  logInfo("OSS DELETE start", { key, bucket: EDGE_CONFIG.OSS_BUCKET, provider: globalThis.OSS?.delete ? "binding" : "http" }, currentRequest());
+  if (globalThis.OSS?.delete) {
+    try {
+      const deleteResult = await globalThis.OSS.delete(key);
+      logInfo("OSS DELETE result", { key, bucket: EDGE_CONFIG.OSS_BUCKET, deleteResult: summarizeOssResult(deleteResult), provider: "binding" }, currentRequest());
+      return deleteResult;
+    } catch (err) {
+      logError("OSS ERROR", err, { operation: "DELETE", key, bucket: EDGE_CONFIG.OSS_BUCKET, provider: "binding" }, currentRequest());
+      throw err;
+    }
+  }
+
+  if (!EDGE_CONFIG.OSS_ENDPOINT) {
+    const err = httpError(500, "OSS 未配置：缺少 ESA OSS 绑定或 OSS_ENDPOINT");
+    logError("OSS ERROR", err, { operation: "DELETE", key, bucket: EDGE_CONFIG.OSS_BUCKET }, currentRequest());
+    throw err;
+  }
+  try {
+    const response = await fetch(`${EDGE_CONFIG.OSS_ENDPOINT.replace(/\/$/, "")}/${key}`, {
+      method: "DELETE",
+      headers: ossHeaders()
+    });
+    if (!response.ok && response.status !== 404) throw httpError(502, `OSS 删除失败：${response.status}`);
+    logInfo("OSS DELETE result", { key, bucket: EDGE_CONFIG.OSS_BUCKET, deleteResult: { status: response.status, ok: response.ok }, provider: "http" }, currentRequest());
+    return { status: response.status, ok: response.ok };
+  } catch (err) {
+    logError("OSS ERROR", err, { operation: "DELETE", key, bucket: EDGE_CONFIG.OSS_BUCKET, provider: "http" }, currentRequest());
     throw err;
   }
 }
@@ -300,6 +356,28 @@ function ossHeaders() {
 
 function currentRequest() {
   return globalThis.__LEARN_APP_CURRENT_REQUEST__;
+}
+
+function getEnv(name, fallback = "") {
+  return globalThis[name] ?? globalThis.process?.env?.[name] ?? fallback;
+}
+
+function summarizeOssResult(value) {
+  if (!value) return value;
+  if (typeof value === "string") return value.slice(0, 200);
+  if (typeof value !== "object") return value;
+  const summary = {};
+  for (const key of ["key", "name", "url", "etag", "status", "ok", "size"]) {
+    if (value[key] !== undefined) summary[key] = value[key];
+  }
+  if (Object.keys(summary).length) return summary;
+  if (Array.isArray(value)) return { type: "array", length: value.length };
+  return { type: "object", keys: Object.keys(value).slice(0, 12) };
+}
+
+function isMissingObjectError(err) {
+  const message = String(err?.message || "");
+  return err?.status === 404 || err?.statusCode === 404 || /NoSuchKey|not found|404/i.test(message);
 }
 
 export function withCurrentRequest(request, fn) {
