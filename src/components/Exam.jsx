@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { apiFetch, areAnswersEqual, formatAnswer } from "../../js/config.js";
-import { loadQuestionsFromFile } from "../../js/oss_api.js";
+import { areAnswersEqual, formatAnswer } from "../../js/config.js";
+import { syncProgress } from "../../js/oss_api.js";
+import UploadRecords from "./UploadRecords.jsx";
 
 export default function Exam() {
   const [allQuestions, setAllQuestions] = useState([]);
@@ -35,16 +36,6 @@ export default function Exam() {
     }
   }, [remaining]);
 
-  async function handleFile(event) {
-    try {
-      const loaded = await loadQuestionsFromFile(event.target.files[0]);
-      setAllQuestions(loaded);
-      showStatus(`已载入 ${loaded.length} 道题`, "success");
-    } catch (err) {
-      showStatus(err.message, "error");
-    }
-  }
-
   function startExam() {
     if (!allQuestions.length) return showStatus("请先上传题库 JSON", "error");
     const count = Math.min(Math.max(Number(examCount) || 1, 1), allQuestions.length);
@@ -74,17 +65,14 @@ export default function Exam() {
     const wrong = details.filter((item) => !item.correct);
 
     try {
-      await apiFetch("/submitAnswer", {
-        method: "POST",
-        body: JSON.stringify({
-          mode: "exam",
-          exam: {
-            total: details.length,
-            score,
-            details,
-            submittedAt: new Date().toISOString()
-          }
-        })
+      await syncProgress({
+        mode: "exam",
+        exam: {
+          total: details.length,
+          score,
+          details,
+          submittedAt: new Date().toISOString()
+        }
       });
       setDeadline(0);
       setResult({ score, total: details.length, wrong });
@@ -116,6 +104,16 @@ export default function Exam() {
     setStatusType(type);
   }
 
+  function handleQuestionsLoaded(loaded) {
+    setAllQuestions(loaded);
+    setExamQuestions([]);
+    setCurrentIndex(0);
+    setAnswers({});
+    setDeadline(0);
+    setResult("交卷后显示成绩。");
+    showStatus(`已载入 ${loaded.length} 道题`, "success");
+  }
+
   return (
     <main className="page-grid">
       <section className="panel">
@@ -123,10 +121,7 @@ export default function Exam() {
           <h1>模拟考试</h1>
           <strong>{timer}</strong>
         </div>
-        <label className="upload-box">
-          上传题库 JSON
-          <input type="file" accept="application/json,.json" onChange={handleFile} />
-        </label>
+        <UploadRecords onQuestionsLoaded={handleQuestionsLoaded} title="考试题库" />
         <div className="exam-controls">
           <label>抽题数 <input type="number" min="1" max="100" value={examCount} onChange={(event) => setExamCount(event.target.value)} /></label>
           <label>分钟 <input type="number" min="1" max="240" value={examMinutes} onChange={(event) => setExamMinutes(event.target.value)} /></label>

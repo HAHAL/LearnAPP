@@ -103,6 +103,7 @@ async function run() {
     "src/components/Quiz.jsx",
     "src/components/Review.jsx",
     "src/components/Exam.jsx",
+    "src/components/UploadRecords.jsx",
     "server/edge-functions/index.js"
   ];
   for (const file of requiredFiles) {

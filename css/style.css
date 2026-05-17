@@ -134,6 +134,15 @@ p {
   box-shadow: 0 18px 40px rgba(20, 90, 52, 0.08);
 }
 
+.glass-card {
+  border: 1px solid rgba(215, 231, 222, 0.72);
+  border-radius: 8px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.58);
+  box-shadow: 0 18px 38px rgba(20, 90, 52, 0.12);
+  backdrop-filter: blur(10px);
+}
+
 .form-card {
   display: grid;
   gap: 16px;
@@ -203,6 +212,82 @@ nav a:hover {
   margin: 16px 0;
   color: var(--green-dark);
   font-weight: 700;
+}
+
+.upload-records {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.file-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  border-radius: 8px;
+  padding: 0 12px;
+  color: var(--white);
+  background: var(--green);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.file-button input {
+  display: none;
+}
+
+.record-table {
+  display: grid;
+  gap: 8px;
+  overflow-x: auto;
+}
+
+.record-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1.4fr) minmax(150px, 1.1fr) minmax(120px, 1fr) minmax(128px, auto);
+  align-items: center;
+  gap: 10px;
+  min-width: 620px;
+  border: 1px solid rgba(215, 231, 222, 0.72);
+  border-radius: 8px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.52);
+}
+
+.record-head {
+  color: var(--green-dark);
+  background: rgba(232, 246, 238, 0.74);
+  font-weight: 800;
+}
+
+.record-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.progress-card {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.progress-card div {
+  display: grid;
+  gap: 2px;
+}
+
+.progress-card strong {
+  color: var(--green-dark);
+  font-size: 24px;
+}
+
+.progress-card span {
+  color: var(--muted);
+  font-size: 13px;
 }
 
 .message {
@@ -325,5 +410,18 @@ nav a:hover {
   .section-title {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .record-table {
+    overflow-x: visible;
+  }
+
+  .record-row {
+    grid-template-columns: 1fr;
+    min-width: 0;
+  }
+
+  .progress-card {
+    grid-template-columns: 1fr;
   }
 }

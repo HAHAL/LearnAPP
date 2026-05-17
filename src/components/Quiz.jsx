@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { apiFetch, areAnswersEqual, formatAnswer } from "../../js/config.js";
 import { getAnalysis } from "../../js/analysis.js";
-import { loadCachedQuestions, loadQuestionsFromFile } from "../../js/oss_api.js";
+import { loadCachedQuestions, syncProgress } from "../../js/oss_api.js";
+import UploadRecords from "./UploadRecords.jsx";
 
 export default function Quiz() {
   const [questions, setQuestions] = useState(() => loadCachedQuestions());
@@ -11,25 +12,27 @@ export default function Quiz() {
   const [statusType, setStatusType] = useState("");
   const [analysis, setAnalysis] = useState("提交答案后显示解析。");
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState(null);
   const question = questions[currentIndex];
+
+  useEffect(() => {
+    let active = true;
+    apiFetch("/getProgress")
+      .then((result) => {
+        if (active) setProgress(result?.progress || null);
+      })
+      .catch(() => {
+        if (active) setProgress(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const meta = useMemo(() => {
     if (!question) return "请先上传题库 JSON";
     return `题号 ${currentIndex + 1}${question.tags.length ? ` · ${question.tags.join(" / ")}` : ""}`;
   }, [currentIndex, question]);
-
-  async function handleFile(event) {
-    try {
-      const loaded = await loadQuestionsFromFile(event.target.files[0]);
-      setQuestions(loaded);
-      setCurrentIndex(0);
-      setSelected(initialSelection(loaded[0]));
-      setAnalysis("提交答案后显示解析。");
-      showStatus(`已载入 ${loaded.length} 道题`, "success");
-    } catch (err) {
-      showStatus(err.message, "error");
-    }
-  }
 
   async function submitAnswer() {
     if (!question) return showStatus("当前没有可提交的题目", "error");
@@ -39,17 +42,15 @@ export default function Quiz() {
     setLoading(true);
     try {
       const explanation = await getAnalysis(question, submittedAnswer, correct);
-      await apiFetch("/submitAnswer", {
-        method: "POST",
-        body: JSON.stringify({
-          mode: "practice",
-          questionId: question.id,
-          question,
-          answer: submittedAnswer,
-          correct,
-          analysis: explanation
-        })
+      const result = await syncProgress({
+        mode: "practice",
+        questionId: question.id,
+        question,
+        answer: submittedAnswer,
+        correct,
+        analysis: explanation
       });
+      if (result?.progress) setProgress(result.progress);
       setAnalysis(`${correct ? "回答正确" : `回答错误，正确答案：${formatAnswer(question.answerKeys)}`}\n\n${explanation}`);
       showStatus("已同步进度", "success");
     } catch (err) {
@@ -83,6 +84,24 @@ export default function Quiz() {
     setStatusType(type);
   }
 
+  async function refreshProgress() {
+    try {
+      const result = await apiFetch("/getProgress");
+      setProgress(result?.progress || null);
+      showStatus("进度已刷新", "success");
+    } catch (err) {
+      showStatus(err.message || "读取进度失败", "error");
+    }
+  }
+
+  function handleQuestionsLoaded(loaded) {
+    setQuestions(loaded);
+    setCurrentIndex(0);
+    setSelected(initialSelection(loaded[0]));
+    setAnalysis("提交答案后显示解析。");
+    showStatus(`已载入 ${loaded.length} 道题`, "success");
+  }
+
   return (
     <main className="page-grid">
       <section className="panel">
@@ -90,11 +109,19 @@ export default function Quiz() {
           <h1>题库练习</h1>
           <span>{questions.length ? `${currentIndex + 1} / ${questions.length}` : "未载入"}</span>
         </div>
-        <label className="upload-box">
-          上传题库 JSON
-          <input type="file" accept="application/json,.json" onChange={handleFile} />
-        </label>
+        <div className="glass-card progress-card">
+          <div>
+            <strong>{progress?.answered ?? 0}</strong>
+            <span>已答</span>
+          </div>
+          <div>
+            <strong>{progress?.correct ?? 0}</strong>
+            <span>正确</span>
+          </div>
+          <button className="secondary compact-button" type="button" onClick={refreshProgress}>刷新进度</button>
+        </div>
         <div className={`message ${statusType}`}>{status}</div>
+        <UploadRecords onQuestionsLoaded={handleQuestionsLoaded} />
       </section>
 
       <section className="panel question-panel">
