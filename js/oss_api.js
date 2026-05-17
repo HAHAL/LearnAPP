@@ -77,17 +77,33 @@ export function saveUploadRecord(record) {
   return records;
 }
 
-export function downloadQuestionBank(record) {
-  if (!record?.questions?.length) throw new Error("该上传记录缺少题库内容，无法下载");
-  const blob = new Blob([JSON.stringify({ questions: record.questions }, null, 2)], { type: "application/json;charset=utf-8" });
+export async function downloadQuestionBank(record) {
+  if (!record?.id) throw new Error("该上传记录缺少题库 ID，无法下载");
+  const result = await apiFetch(`/downloadQuestions?bankId=${encodeURIComponent(record.id)}`);
+  const bank = result?.bank || record;
+  const questions = bank.questions || record.questions;
+  if (!questions?.length) throw new Error("该上传记录缺少题库内容，无法下载");
+  const blob = new Blob([JSON.stringify({ questions }, null, 2)], { type: "application/json;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = record.fileName || "questions.json";
+  link.download = bank.fileName || bank.name || record.fileName || "questions.json";
   document.body.append(link);
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+  return bank;
+}
+
+export async function deleteQuestionBankRecord(record) {
+  if (!record?.id) throw new Error("该上传记录缺少题库 ID，无法删除");
+  await apiFetch("/deleteQuestions", {
+    method: "POST",
+    body: JSON.stringify({ bankId: record.id })
+  });
+  const records = getUploadRecords().filter((item) => item.id !== record.id);
+  localStorage.setItem(UPLOAD_RECORDS_KEY, JSON.stringify(records));
+  return records;
 }
 
 export async function syncProgress(payload) {

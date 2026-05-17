@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { downloadQuestionBank, getUploadRecords, uploadQuestionsFromFile } from "../../js/oss_api.js";
+import { deleteQuestionBankRecord, downloadQuestionBank, getUploadRecords, uploadQuestionsFromFile } from "../../js/oss_api.js";
 
 export default function UploadRecords({ onQuestionsLoaded, title = "题库上传" }) {
   const [records, setRecords] = useState(() => getUploadRecords());
@@ -43,11 +43,25 @@ export default function UploadRecords({ onQuestionsLoaded, title = "题库上传
     setMessageType("success");
   }
 
-  function download(record) {
+  async function download(record) {
     try {
-      downloadQuestionBank(record);
+      await downloadQuestionBank(record);
+      setMessage("题库下载成功");
+      setMessageType("success");
     } catch (err) {
       setMessage(err.message || "下载失败");
+      setMessageType("error");
+    }
+  }
+
+  async function remove(record) {
+    try {
+      const nextRecords = await deleteQuestionBankRecord(record);
+      setRecords(nextRecords);
+      setMessage("题库记录已删除");
+      setMessageType("success");
+    } catch (err) {
+      setMessage(err.message || "删除失败");
       setMessageType("error");
     }
   }
@@ -77,6 +91,7 @@ export default function UploadRecords({ onQuestionsLoaded, title = "题库上传
             <span className="record-actions">
               <button className="secondary compact-button" type="button" onClick={() => loadRecord(record)}>载入</button>
               <button className="secondary compact-button" type="button" onClick={() => download(record)}>下载</button>
+              <button className="danger compact-button" type="button" onClick={() => remove(record)}>删除</button>
             </span>
           </div>
         )) : <div className="empty">暂无上传记录</div>}

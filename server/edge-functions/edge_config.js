@@ -58,8 +58,10 @@ export function handleOptions(request) {
 export function beginRequestLog(request, functionName) {
   const logs = [];
   requestLogs.set(request, logs);
+  globalThis.__LEARN_APP_CURRENT_REQUEST__ = request;
   logInfo("function triggered", {
     functionName,
+    triggeredAt: new Date().toISOString(),
     method: request.method,
     url: request.url,
     env: getEnvironmentStatus()
@@ -201,41 +203,92 @@ function cryptoRandom() {
 }
 
 async function readUserJson(key) {
+  logInfo("OSS GET start", { key, bucket: EDGE_CONFIG.OSS_BUCKET, provider: globalThis.OSS?.get ? "binding" : "http" }, currentRequest());
   if (globalThis.OSS?.get) {
-    const value = await globalThis.OSS.get(key);
-    if (!value) return null;
-    return typeof value.json === "function" ? value.json() : JSON.parse(String(value));
+    try {
+      const value = await globalThis.OSS.get(key);
+      logInfo("OSS GET success", { key, bucket: EDGE_CONFIG.OSS_BUCKET, found: Boolean(value), provider: "binding" }, currentRequest());
+      if (!value) return null;
+      return typeof value.json === "function" ? value.json() : JSON.parse(String(value));
+    } catch (err) {
+      logError("OSS GET failed", err, { key, bucket: EDGE_CONFIG.OSS_BUCKET, provider: "binding" }, currentRequest());
+      throw err;
+    }
   }
 
-  if (!EDGE_CONFIG.OSS_ENDPOINT) return null;
-  const response = await fetch(`${EDGE_CONFIG.OSS_ENDPOINT.replace(/\/$/, "")}/${key}`, {
-    method: "GET",
-    headers: ossHeaders()
-  });
-  if (response.status === 404) return null;
-  if (!response.ok) throw httpError(502, `OSS 读取失败：${response.status}`);
-  return response.json();
+  if (!EDGE_CONFIG.OSS_ENDPOINT) {
+    logInfo("OSS GET skipped", { key, bucket: EDGE_CONFIG.OSS_BUCKET, reason: "OSS_ENDPOINT not configured" }, currentRequest());
+    return null;
+  }
+  try {
+    const response = await fetch(`${EDGE_CONFIG.OSS_ENDPOINT.replace(/\/$/, "")}/${key}`, {
+      method: "GET",
+      headers: ossHeaders()
+    });
+    if (response.status === 404) {
+      logInfo("OSS GET success", { key, bucket: EDGE_CONFIG.OSS_BUCKET, found: false, provider: "http" }, currentRequest());
+      return null;
+    }
+    if (!response.ok) throw httpError(502, `OSS 读取失败：${response.status}`);
+    logInfo("OSS GET success", { key, bucket: EDGE_CONFIG.OSS_BUCKET, found: true, provider: "http" }, currentRequest());
+    return response.json();
+  } catch (err) {
+    logError("OSS GET failed", err, { key, bucket: EDGE_CONFIG.OSS_BUCKET, provider: "http" }, currentRequest());
+    throw err;
+  }
 }
 
 async function writeUserJson(key, user) {
   const body = JSON.stringify(user);
+  logInfo("OSS PUT start", { key, bucket: EDGE_CONFIG.OSS_BUCKET, size: body.length, provider: globalThis.OSS?.put ? "binding" : "http" }, currentRequest());
   if (globalThis.OSS?.put) {
-    await globalThis.OSS.put(key, body, { httpMetadata: { contentType: "application/json; charset=utf-8" } });
-    logInfo("OSS user JSON write success", { key, size: body.length, provider: "binding" });
+    try {
+      await globalThis.OSS.put(key, body, { httpMetadata: { contentType: "application/json; charset=utf-8" } });
+      logInfo("OSS PUT success", { key, bucket: EDGE_CONFIG.OSS_BUCKET, size: body.length, provider: "binding" }, currentRequest());
+    } catch (err) {
+      logError("OSS PUT failed", err, { key, bucket: EDGE_CONFIG.OSS_BUCKET, size: body.length, provider: "binding" }, currentRequest());
+      throw err;
+    }
     return;
   }
 
-  if (!EDGE_CONFIG.OSS_ENDPOINT) return;
-  const response = await fetch(`${EDGE_CONFIG.OSS_ENDPOINT.replace(/\/$/, "")}/${key}`, {
-    method: "PUT",
-    headers: {
-      "Content-Type": "application/json; charset=utf-8",
-      ...ossHeaders()
-    },
-    body
-  });
-  if (!response.ok) throw httpError(502, `OSS 写入失败：${response.status}`);
-  logInfo("OSS user JSON write success", { key, size: body.length, provider: "http" });
+  if (!EDGE_CONFIG.OSS_ENDPOINT) {
+    logInfo("OSS PUT skipped", { key, bucket: EDGE_CONFIG.OSS_BUCKET, reason: "OSS_ENDPOINT not configured" }, currentRequest());
+    return;
+  }
+  try {
+    const response = await fetch(`${EDGE_CONFIG.OSS_ENDPOINT.replace(/\/$/, "")}/${key}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        ...ossHeaders()
+      },
+      body
+    });
+    if (!response.ok) throw httpError(502, `OSS 写入失败：${response.status}`);
+    logInfo("OSS PUT success", { key, bucket: EDGE_CONFIG.OSS_BUCKET, size: body.length, provider: "http" }, currentRequest());
+  } catch (err) {
+    logError("OSS PUT failed", err, { key, bucket: EDGE_CONFIG.OSS_BUCKET, size: body.length, provider: "http" }, currentRequest());
+    throw err;
+  }
+}
+
+export async function deleteUserQuestionBank(email, bankId, request) {
+  const user = await getUser(email);
+  const before = Array.isArray(user.questionBanks) ? user.questionBanks.length : 0;
+  user.questionBanks = (user.questionBanks || []).filter((bank) => String(bank.id) !== String(bankId));
+  if (user.questionBanks.length === before) throw httpError(404, "题库记录不存在");
+  logInfo("question bank delete from user JSON", { userId: email, bankId, ossKey: userKey(email) }, request);
+  await saveUser(user);
+  return user;
+}
+
+export async function getUserQuestionBank(email, bankId, request) {
+  const user = await getUser(email);
+  const bank = (user.questionBanks || []).find((item) => String(item.id) === String(bankId));
+  if (!bank) throw httpError(404, "题库记录不存在");
+  logInfo("question bank read from user JSON", { userId: email, bankId, ossKey: userKey(email), count: bank.count || bank.questions?.length || 0 }, request);
+  return bank;
 }
 
 function ossHeaders() {
@@ -243,4 +296,26 @@ function ossHeaders() {
   if (EDGE_CONFIG.OSS_ACCESS_KEY_ID) headers["x-oss-access-key-id"] = EDGE_CONFIG.OSS_ACCESS_KEY_ID;
   if (EDGE_CONFIG.OSS_ACCESS_KEY_SECRET) headers["x-oss-access-key-secret"] = EDGE_CONFIG.OSS_ACCESS_KEY_SECRET;
   return headers;
+}
+
+function currentRequest() {
+  return globalThis.__LEARN_APP_CURRENT_REQUEST__;
+}
+
+export function withCurrentRequest(request, fn) {
+  const previous = globalThis.__LEARN_APP_CURRENT_REQUEST__;
+  globalThis.__LEARN_APP_CURRENT_REQUEST__ = request;
+  try {
+    const result = fn();
+    if (result && typeof result.then === "function") {
+      return result.finally(() => {
+        globalThis.__LEARN_APP_CURRENT_REQUEST__ = previous;
+      });
+    }
+    globalThis.__LEARN_APP_CURRENT_REQUEST__ = previous;
+    return result;
+  } catch (err) {
+    globalThis.__LEARN_APP_CURRENT_REQUEST__ = previous;
+    throw err;
+  }
 }
