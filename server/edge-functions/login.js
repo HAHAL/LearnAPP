@@ -3,7 +3,7 @@ import { createToken, emptyUser, errorResponse, getUser, handleOptions, jsonResp
 export default {
   async fetch(request) {
     if (request.method === "OPTIONS") return handleOptions(request);
-    if (request.method !== "POST") return jsonResponse({ error: "仅支持 POST" }, 405, request);
+    if (request.method !== "POST") return jsonResponse({ message: "仅支持 POST" }, 405, request);
     try {
       const body = await readJsonBody(request);
       const email = sanitizeEmail(body.email);
@@ -15,7 +15,7 @@ export default {
       user.lastLoginAt = new Date().toISOString();
       await saveUser(user);
 
-      return jsonResponse({ token: createToken(email), user }, 200, request);
+      return jsonResponse({ info: "登录成功", token: createToken(email), user }, 200, request);
     } catch (err) {
       return errorResponse(err, request);
     }

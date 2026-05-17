@@ -12,11 +12,23 @@ export const EDGE_CONFIG = {
   CORS_ALLOWED_ORIGINS: (globalThis.CORS_ALLOWED_ORIGINS || "*").split(",").map((item) => item.trim())
 };
 
+console.log("[learnapp:init] Edge Function environment", {
+  OSS_BUCKET: EDGE_CONFIG.OSS_BUCKET,
+  OSS_REGION: EDGE_CONFIG.OSS_REGION,
+  OSS_ACCESS_KEY_ID_EXISTS: Boolean(EDGE_CONFIG.OSS_ACCESS_KEY_ID),
+  OSS_ACCESS_KEY_SECRET_EXISTS: Boolean(EDGE_CONFIG.OSS_ACCESS_KEY_SECRET),
+  MODEL_API_KEY_EXISTS: Boolean(EDGE_CONFIG.MODEL_API_KEY)
+});
+
 const inMemoryStore = globalThis.__LEARN_APP_STORE__ || new Map();
 globalThis.__LEARN_APP_STORE__ = inMemoryStore;
 
 export function jsonResponse(data, status = 200, request) {
-  return new Response(JSON.stringify(data), {
+  const ok = status >= 200 && status < 400;
+  const payload = ok
+    ? { status: "success", info: data?.info || "OK", ...data }
+    : { status: "error", message: data?.message || data?.error || "服务器错误", ...data };
+  return new Response(JSON.stringify(payload), {
     status,
     headers: {
       "Content-Type": "application/json; charset=utf-8",
@@ -99,8 +111,9 @@ export async function getUser(email) {
 
 export async function saveUser(user) {
   user.updatedAt = new Date().toISOString();
-  inMemoryStore.set(userKey(user.email), structuredClone(user));
-  await writeUserJson(userKey(user.email), user);
+  const key = userKey(user.email);
+  inMemoryStore.set(key, structuredClone(user));
+  await writeUserJson(key, user);
   return user;
 }
 
@@ -109,7 +122,24 @@ export function userKey(email) {
 }
 
 export function errorResponse(err, request) {
-  return jsonResponse({ error: err.message || "服务器错误" }, err.status || 500, request);
+  console.error("[learnapp:error]", {
+    message: err.message || "服务器错误",
+    stack: err.stack,
+    status: err.status || 500
+  });
+  return jsonResponse({ message: err.message || "服务器错误", error: err.message || "服务器错误" }, err.status || 500, request);
+}
+
+export function logInfo(message, details = {}) {
+  console.log(`[learnapp] ${message}`, details);
+}
+
+export function logError(message, err, details = {}) {
+  console.error(`[learnapp] ${message}`, {
+    ...details,
+    message: err?.message || String(err),
+    stack: err?.stack
+  });
 }
 
 function cryptoRandom() {
@@ -139,6 +169,7 @@ async function writeUserJson(key, user) {
   const body = JSON.stringify(user);
   if (globalThis.OSS?.put) {
     await globalThis.OSS.put(key, body, { httpMetadata: { contentType: "application/json; charset=utf-8" } });
+    logInfo("OSS user JSON write success", { key, size: body.length, provider: "binding" });
     return;
   }
 
@@ -152,6 +183,7 @@ async function writeUserJson(key, user) {
     body
   });
   if (!response.ok) throw httpError(502, `OSS 写入失败：${response.status}`);
+  logInfo("OSS user JSON write success", { key, size: body.length, provider: "http" });
 }
 
 function ossHeaders() {
